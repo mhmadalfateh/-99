@@ -25,14 +25,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y unzip
 
-      - name: Extract project ZIP
+      - name: Find and extract project ZIP
         shell: bash
         run: |
           set -euo pipefail
 
           mkdir -p extracted
 
-          ZIP_FILE=$(find . -maxdepth 3 -type f -name '*.zip' \
+          ZIP_FILE=$(find . -maxdepth 4 -type f -name '*.zip' \
             ! -path './extracted/*' -print -quit)
 
           if [ -z "$ZIP_FILE" ]; then
@@ -40,6 +40,7 @@ jobs:
             exit 1
           fi
 
+          echo "Extracting $ZIP_FILE"
           unzip -o "$ZIP_FILE" -d extracted
 
           SETTINGS=$(find extracted -type f \( \
@@ -54,34 +55,41 @@ jobs:
 
           PROJECT_DIR="$(dirname "$SETTINGS")"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Found project: $PROJECT_DIR"
 
-          echo "Project found: $PROJECT_DIR"
-
-      - name: Add Firebase configuration
+      - name: Locate Firebase configuration
         shell: bash
         run: |
           set -euo pipefail
 
-          SOURCE="app/google-services.json"
+          CONFIG=""
 
-          if [ ! -f "$SOURCE" ]; then
-            echo "::error::Firebase config not found at app/google-services.json"
+          if [ -f "app/google-services.json" ]; then
+            CONFIG="app/google-services.json"
+          else
+            CONFIG=$(find . -maxdepth 6 -type f \
+              -name 'google-services.json' \
+              ! -path './extracted/*' -print -quit || true)
+          fi
+
+          if [ -z "$CONFIG" ]; then
+            echo "::error::google-services.json not found in repository."
             exit 1
           fi
 
           mkdir -p "$PROJECT_DIR/app"
-          cp "$SOURCE" "$PROJECT_DIR/app/google-services.json"
+          cp "$CONFIG" "$PROJECT_DIR/app/google-services.json"
 
-          echo "Firebase configuration copied."
+          echo "Firebase configuration copied successfully."
 
-      - name: Build APK
+      - name: Build Android APK
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
 
           if [ ! -f gradlew ]; then
-            echo "::error::Gradle wrapper missing from project ZIP."
+            echo "::error::gradlew is missing from the Android project."
             exit 1
           fi
 
